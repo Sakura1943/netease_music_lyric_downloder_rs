@@ -1,24 +1,18 @@
 #![allow(unused_assignments)]
-pub(crate) mod cli;
+pub mod cli;
 pub mod fetch;
-use crate::{
-    cli::Cli,
-    fetch::{fetch_lyric, fetch_song_info, Result},
-};
+use crate::fetch::{fetch_lyric, fetch_song_info, Result};
 use anyhow::anyhow;
 use console::Term;
 use dialoguer::{theme::ColorfulTheme, Select};
+use json::JsonValue;
 use std::{
     fs::{create_dir, File},
     io::Write,
     path::Path,
 };
 
-pub async fn run() -> Result<()> {
-    let client = Cli::build();
-    let save_path = client.save_path;
-    let search_name = client.search_name;
-
+pub async fn run(search_name: String, save_path: String) -> Result<()> {
     /* 获取关键字检索到的歌曲信息 */
     let resp = fetch_song_info(search_name.clone()).await?;
     /* 获取歌曲信息列表 */
@@ -53,16 +47,23 @@ pub async fn run() -> Result<()> {
         .with_prompt("请选择其中一个id进行下载:")
         .items(&selections)
         .default(0)
-        .interact_on_opt(&Term::stderr())?
-        .unwrap();
-
-    /* 获取歌曲的歌词返回信息列表 */
-    let lrc_resp_vec = fetch_lyric(ids[selection]).await?;
-
-    /* 获取歌曲的名字*/
-    let song_name = &songs_name[selection].replace(" ", "_");
-    /* 获取歌曲的艺术家的名字*/
-    let artist_name = &artists[selection].replace(" ", "_");
+        .interact_on_opt(&Term::stderr())?;
+    let mut lrc_resp_vec = JsonValue::new_array();
+    let mut song_name = String::new();
+    let mut artist_name = String::new();
+    match selection {
+        Some(selection) => {
+            lrc_resp_vec = fetch_lyric(ids[selection]).await?;
+            /* 获取歌曲的名字*/
+            song_name = songs_name[selection].replace(" ", "_");
+            /* 获取歌曲的艺术家的名字*/
+            artist_name = artists[selection].replace(" ", "_");
+        }
+        None => {
+            eprintln!("获取序号失败");
+            return Ok(());
+        }
+    }
 
     /* 获取歌曲的歌词 */
     let lrc = lrc_resp_vec["lrc"]["lyric"].to_string();
